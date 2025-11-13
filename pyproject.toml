@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "project3_lamotkin_andrey_25555"
+version = "0.1.0"
+description = "Консольное приложение для имитации работы валютного кошелька"
+authors = ["Andrey Lamotkin <andrey@lamotkin.ru>"]
+readme = "README.md"
+packages = [{include = "project3_lamotkin_andrey_25555", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+prettytable = "^3.10.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
