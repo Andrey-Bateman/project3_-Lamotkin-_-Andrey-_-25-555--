@@ -63,3 +63,16 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> Optional[float]:
 def generate_salt() -> str:
     import hashlib  
     return hashlib.sha256(str(datetime.now()).encode()).hexdigest()[:8]
+
+
+def load_session() -> Optional[int]:
+    data = load_json('session.json')
+    if data and 'user_id' in data:
+        return data['user_id']
+    return None
+
+def save_session(user_id: int) -> None:
+    save_json('session.json', {'user_id': user_id, 'timestamp': datetime.now().isoformat()})
+
+def clear_session() -> None:
+    save_json('session.json', {})
