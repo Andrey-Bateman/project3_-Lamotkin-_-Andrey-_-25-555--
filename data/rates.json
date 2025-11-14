@@ -1,0 +1,8 @@
+{
+  "BTC_USD": {
+    "rate": 59337.21,
+    "updated_at": "2025-11-14T18:52:41.712165"
+  },
+  "last_refresh": "2025-11-14T18:52:41.712174",
+  "source": "MockParser"
+}
