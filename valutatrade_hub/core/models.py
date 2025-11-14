@@ -1,6 +1,8 @@
 import hashlib  
 from datetime import datetime  
 from typing import Optional  
+from typing import Dict
+from .utils import get_exchange_rate
 
 class User:
     def __init__(self, user_id: int, username: str, hashed_password: str, salt: str, registration_date: datetime):
@@ -83,3 +85,50 @@ class Wallet:
 
     def get_balance_info(self) -> str:
         return f"{self.currency_code}: {self._balance:.4f}"  
+
+class Portfolio:
+    def __init__(self, user_id: int, wallets: Dict[str, Wallet] = None):
+        self._user_id = user_id
+        self._wallets = wallets or {}  
+
+    @property
+    def user_id(self) -> int:
+        return self._user_id
+
+    @property
+    def user(self) -> Optional[User]:
+        from .usecases import get_user_by_id
+        return get_user_by_id(self._user_id)
+    @property
+    def wallets(self) -> Dict[str, Wallet]:
+        return self._wallets.copy()
+
+    def add_currency(self, currency_code: str) -> None:
+        code = currency_code.upper()
+        if code in self._wallets:
+            raise ValueError("Код валюты уже существует в портфеле")
+        self._wallets[code] = Wallet(code)  
+
+    def get_wallet(self, currency_code: str) -> Optional[Wallet]:
+        code = currency_code.upper()
+        return self._wallets.get(code)
+
+    def get_total_value(self, base_currency: str = 'USD') -> float:
+        base_code = base_currency.upper()
+        total = 0.0
+        exchange_rates = {
+            'EUR': 1.0786,  
+            'BTC': 59337.21,
+            'RUB': 0.01016,
+            'ETH': 3720.00,
+           
+        }
+        for code, wallet in self._wallets.items():
+            if code == base_code:
+                total += wallet.balance
+            else:
+                rate = get_exchange_rate(code, base_code)
+                if rate is None:
+                    rate = 1.0  
+                total += wallet.balance * rate
+        return total
