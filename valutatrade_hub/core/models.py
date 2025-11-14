@@ -50,3 +50,36 @@ class User:
     def verify_password(self, password: str) -> bool:
         hashed = hashlib.sha256((password + self._salt).encode()).hexdigest()
         return hashed == self._hashed_password
+
+
+class Wallet:
+    def __init__(self, currency_code: str, balance: float = 0.0):
+        if not currency_code or not isinstance(currency_code, str):
+            raise ValueError("Код валюты не может быть пустым")
+        self.currency_code = currency_code.upper()  
+        self._balance = float(balance)  
+
+    @property
+    def balance(self) -> float:
+        return self._balance
+
+    @balance.setter
+    def balance(self, value: float):
+        if not isinstance(value, (int, float)) or value < 0:
+            raise ValueError("Баланс не может быть отрицательным")
+        self._balance = float(value)
+
+    def deposit(self, amount: float) -> None:
+        if not isinstance(amount, (int, float)) or amount <= 0:
+            raise ValueError("'amount' должен быть положительным числом")
+        self._balance += float(amount)
+
+    def withdraw(self, amount: float) -> None:
+        if not isinstance(amount, (int, float)) or amount <= 0:
+            raise ValueError("'amount' должен быть положительным числом")
+        if amount > self._balance:
+            raise ValueError(f"Недостаточно средств: доступно {self._balance}, требуется {amount}")
+        self._balance -= float(amount)
+
+    def get_balance_info(self) -> str:
+        return f"{self.currency_code}: {self._balance:.4f}"  
