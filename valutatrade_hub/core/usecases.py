@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .models import User, Portfolio, Wallet
-from .utils import load_json, save_json, generate_salt
+from .utils import load_json, save_json, generate_salt, get_exchange_rate
 from .exceptions import CurrencyNotFoundError, InsufficientFundsError, ApiRequestError
 from .currencies import get_currency
 from ..infra.database import DatabaseManager
@@ -85,7 +85,7 @@ def get_portfolio(user_id: int) -> Optional[Portfolio]:
         if p_data['user_id'] == user_id:
             wallets_dict: Dict[str, Wallet] = {}
             for code, w_data in p_data['wallets'].items():
-                wallets_dict[code] = Wallet(w_data['currency_code'], w_data['balance'])
+                wallets_dict[code] = Wallet(code, w_data['balance'])
             return Portfolio(user_id, wallets_dict)
     return None
 
@@ -97,7 +97,7 @@ def save_portfolio(portfolio: Portfolio) -> None:
             wallets_data: Dict[str, Dict[str, Any]] = {}
             for code, wallet in portfolio.wallets.items():
                 wallets_data[code] = {
-                    'currency_code': wallet.currency_code,
+                    'currency_code': code,
                     'balance': wallet.balance
                 }
             portfolios[i]['wallets'] = wallets_data
@@ -108,9 +108,11 @@ def save_portfolio(portfolio: Portfolio) -> None:
 
 @log_action('BUY', verbose=True)
 def buy(user_id: int, currency_code: str, amount: float) -> None:
-    get_currency(currency_code)
+    if amount <= 0:
+        raise ValueError("'amount' должен быть положительным числом")
+    get_currency(currency_code)  
     db = DatabaseManager()
-    portfolio = db.get_portfolio(user_id) or Portfolio(user_id)
+    portfolio = get_portfolio(user_id) or Portfolio(user_id)
     wallet = portfolio.get_wallet(currency_code)
     if not wallet:
         portfolio.add_currency(currency_code)
@@ -121,14 +123,19 @@ def buy(user_id: int, currency_code: str, amount: float) -> None:
     if usd_rate is None and currency_code != 'USD':
         raise ApiRequestError('No rate data')
     cost = amount * usd_rate if usd_rate else amount
-    db.save_portfolio(portfolio)
+    save_portfolio(portfolio)
+    print(f"Покупка выполнена: {amount:.4f} {currency_code} по курсу {usd_rate:.2f if usd_rate else 'N/A'} USD/{currency_code}")
+    print(f"Изменения в портфеле:\n- {currency_code}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
+    print(f"Оценочная стоимость покупки: {cost:.2f} USD")
     return f"Cost: {cost:.2f} USD"
 
 @log_action('SELL', verbose=True)
 def sell(user_id: int, currency_code: str, amount: float) -> None:
-    get_currency(currency_code)
+    if amount <= 0:
+        raise ValueError("'amount' должен быть положительным числом")
+    get_currency(currency_code)  
     db = DatabaseManager()
-    portfolio = db.get_portfolio(user_id)
+    portfolio = get_portfolio(user_id)
     if not portfolio:
         raise ValueError("У вас нет портфеля.")
     wallet = portfolio.get_wallet(currency_code)
@@ -147,14 +154,25 @@ def sell(user_id: int, currency_code: str, amount: float) -> None:
         portfolio.add_currency('USD')
         usd_wallet = portfolio.get_wallet('USD')
     usd_wallet.deposit(revenue)
-    db.save_portfolio(portfolio)
+    save_portfolio(portfolio)
+    print(f"Продажа выполнена: {amount:.4f} {currency_code} по курсу {usd_rate:.2f if usd_rate else 'N/A'} USD/{currency_code}")
+    print(f"Изменения в портфеле:\n- {currency_code}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
+    print(f"Оценочная выручка: {revenue:.2f} USD")
     return f"Revenue: {revenue:.2f} USD"
 
 def get_rate(from_code: str, to_code: str) -> float:
-    get_currency(from_code)
-    get_currency(to_code)
+    get_currency(from_code)  
+    get_currency(to_code)  
     settings = SettingsLoader()
     ttl = settings.get('rates_ttl_seconds', 300)
+    data = load_json('rates.json')
+    key = f"{from_code}_{to_code}"
+    if key in data:
+        updated_at = data[key].get('updated_at')
+        if updated_at:
+            update_time = datetime.fromisoformat(updated_at)
+            if datetime.now() - update_time > timedelta(seconds=ttl):
+                raise ApiRequestError('Cache expired, API call needed')
     rate = get_exchange_rate(from_code, to_code)
     if rate is None:
         raise ApiRequestError('No data available')
