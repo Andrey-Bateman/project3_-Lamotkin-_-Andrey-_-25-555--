@@ -69,23 +69,23 @@ def update_rates(args):
     if args.source == 'coingecko':
         crypto_rates = updater.coingecko.fetch_rates(config.BASE_CURRENCY)
         updater.storage.save_rates_cache(crypto_rates, 'CoinGecko')
-        print(f"Updated CoinGecko: {len(crypto_rates)} rates")
+        print(f"Обновлено CoinGecko: {len(crypto_rates)} курсов")
     elif args.source == 'exchangerate':
         fiat_rates = updater.exrate.fetch_rates(config.BASE_CURRENCY)
         updater.storage.save_rates_cache(fiat_rates, 'ExchangeRate-API')
-        print(f"Updated ExchangeRate-API: {len(fiat_rates)} rates")
+        print(f"Обновлено ExchangeRate-API: {len(fiat_rates)} курсов")
     else:
         result = updater.run_update()
-        print(f"Update successful. Total rates updated: {result['updated']}. Errors: {result['errors']}")
+        print(f"Обновление успешно. Всего обновлено курсов: {result['updated']}. Ошибок: {result['errors']}")
         if result['errors']:
-            print("Check logs for details.")
+            print("Проверьте логи для деталей.")
 
 def show_rates(args):
     data = load_json('rates.json')
-    if not data or 'pairs' not in data:
+    if not data:
         print("Локальный кеш курсов пуст. Выполните 'update-rates'.")
         return
-    pairs = data['pairs']
+    pairs = data if 'pairs' not in data else data['pairs']
     base = (args.base or 'USD').upper()
     if args.currency:
         key = f"{args.currency.upper()}_{base}"
@@ -97,7 +97,7 @@ def show_rates(args):
         return
     if args.top:
         crypto_pairs = {k: v for k, v in pairs.items() if k.endswith('_USD') and k.startswith(('BTC', 'ETH', 'SOL'))}
-        sorted_crypto = sorted(crypto_pairs.items(), key=lambda x: x[1]['rate'], reverse=True)[:args.top]
+        sorted_crypto = sorted(crypto_pairs.items(), key=lambda x: (x[1]['rate'], x[0]), reverse=True)[:args.top]  
         print(f"Top {args.top} крипто (база USD):")
         for pair_key, pair in sorted_crypto:
             print(f"- {pair_key}: {pair['rate']} ({pair['source']})")
@@ -106,6 +106,22 @@ def show_rates(args):
         for pair_key, pair in pairs.items():
             if pair_key.endswith(f"_{base}"):
                 print(f"- {pair_key}: {pair['rate']} ({pair['source']}, {pair['updated_at']})")
+
+
+def get_rate(args):
+    try:
+        from_curr = args.from_.upper()
+        to_curr = args.to.upper()
+        rate = get_rate(from_curr, to_curr) 
+        data = load_json('rates.json')
+        key = f"{from_curr}_{to_curr}"
+        updated = data.get(key, {}).get('updated_at', 'unknown')
+        print(f"Курс {from_curr}→{to_curr}: {rate:.8f} (обновлено: {updated})")
+        rev_rate = get_exchange_rate(to_curr, from_curr)
+        if rev_rate:
+            print(f"Обратный курс {to_curr}→{from_curr}: {rev_rate:.2f}")
+    except ValueError as e:
+        print(str(e))
 
 def main():
     global current_user
@@ -118,35 +134,26 @@ def main():
             clear_session()
     parser = argparse.ArgumentParser(description='ValutaTrade Hub CLI')
     subparsers = parser.add_subparsers(dest='command', help='Доступные команды')
-
     reg = subparsers.add_parser('register', help='Регистрация нового пользователя')
     reg.add_argument('--username', required=True, help='Имя пользователя (уникальное)')
     reg.add_argument('--password', required=True, help='Пароль (минимум 4 символа)')
-
     log = subparsers.add_parser('login', help='Вход в систему')
     log.add_argument('--username', required=True)
     log.add_argument('--password', required=True)
-
     pf = subparsers.add_parser('show-portfolio', help='Показать портфель')
     pf.add_argument('--base', default='USD', help='Базовая валюта для конвертации (по умолчанию USD)')
-
     buy_p = subparsers.add_parser('buy', help='Купить валюту')
     buy_p.add_argument('--currency', required=True, help='Код валюты (e.g., BTC, EUR)')
     buy_p.add_argument('--amount', type=float, required=True, help='Количество для покупки')
-
     sell_p = subparsers.add_parser('sell', help='Продать валюту')
     sell_p.add_argument('--currency', required=True, help='Код валюты')
     sell_p.add_argument('--amount', type=float, required=True, help='Количество для продажи')
-
     rate_p = subparsers.add_parser('get-rate', help='Получить курс валют')
     rate_p.add_argument('--from', dest='from_', required=True, help='Исходная валюта (e.g., USD)')
     rate_p.add_argument('--to', required=True, help='Целевая валюта (e.g., BTC)')
-
     logout_p = subparsers.add_parser('logout', help='Выход из системы')
-
     update_p = subparsers.add_parser('update-rates', help='Обновить курсы')
     update_p.add_argument('--source', choices=['coingecko', 'exchangerate', 'all'], default='all', help='Источник (default: all)')
-
     show_rates_p = subparsers.add_parser('show-rates', help='Показать курсы')
     show_rates_p.add_argument('--currency', help='Курс для валюты')
     show_rates_p.add_argument('--top', type=int, help='Top N крипты')
@@ -169,20 +176,13 @@ def main():
         elif args.command == 'sell':
             sell(current_user.user_id, args.currency.upper(), float(args.amount))
         elif args.command == 'get-rate':
-            rate = get_rate(args.from_.upper(), args.to.upper())
-            data = load_json('rates.json')
-            key = f"{args.from_.upper()}_{args.to.upper()}"
-            updated = data.get(key, {}).get('updated_at', 'unknown')
-            print(f"Курс {args.from_.upper()}→{args.to.upper()}: {rate:.8f} (обновлено: {updated})")
-            rev_rate = get_exchange_rate(args.to.upper(), args.from_.upper())
-            if rev_rate:
-                print(f"Обратный курс {args.to.upper()}→{args.from_.upper()}: {rev_rate:.2f}")
+            get_rate(args)
         elif args.command == 'logout':
             logout(args)
         elif args.command == 'update-rates':
-            update_rates(args) 
+            update_rates(args)
         elif args.command == 'show-rates':
-            show_rates(args) 
+            show_rates(args)
     except InsufficientFundsError as e:
         print(str(e))
     except CurrencyNotFoundError as e:
