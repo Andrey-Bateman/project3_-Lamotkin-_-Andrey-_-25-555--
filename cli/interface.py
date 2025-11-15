@@ -172,25 +172,37 @@ def main():
     rate_p.add_argument('--from', dest='from_', required=True, help='Исходная валюта (e.g., USD)')
     rate_p.add_argument('--to', required=True, help='Целевая валюта (e.g., BTC)')
     logout_p = subparsers.add_parser('logout', help='Выход из системы')
-
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(1)
-    if args.command == 'register':
-        register(args)
-    elif args.command == 'login':
-        login(args)
-    elif args.command == 'show-portfolio':
-        show_portfolio(args)
-    elif args.command == 'buy':
-        buy(args)
-    elif args.command == 'sell':
-        sell(args)
-    elif args.command == 'get-rate':
-        get_rate(args)
-    elif args.command == 'logout':
-        logout(args)
+    try:
+        if args.command == 'register':
+            register(args)
+        elif args.command == 'login':
+            login(args)
+        elif args.command == 'show-portfolio':
+            show_portfolio(args)
+        elif args.command == 'buy':
+            buy(args)
+        elif args.command == 'sell':
+            sell(args)
+        elif args.command == 'get-rate':
+            get_rate(args)
+        elif args.command == 'logout':
+            logout(args)
+    except InsufficientFundsError as e:
+        print(str(e))
+    except CurrencyNotFoundError as e:
+        print(str(e))
+        print("Поддерживаемые коды: USD, EUR, RUB, BTC, ETH. Используйте help get-rate.")
+    except ApiRequestError as e:
+        print(str(e))
+        print("Повторите попытку позже или проверьте сеть.")
+    except ValueError as e:
+        print(f"Ошибка валидации: {e}")
+    except Exception as e:
+        print(f"Неожиданная ошибка: {e}")
 
 if __name__ == '__main__':
     main()
