@@ -9,6 +9,8 @@ packages = [{include = "project3_lamotkin_andrey_25555", from = "src"}]
 [tool.poetry.dependencies]
 python = "^3.10"
 prettytable = "^3.10.0"
+requests = "^2.32.5"
+schedule = "^1.2.2"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.0"

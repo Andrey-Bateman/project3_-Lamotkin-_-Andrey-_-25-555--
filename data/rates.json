@@ -1,12 +1,78 @@
 {
   "BTC_USD": {
-    "rate": 59337.21,
-    "updated_at": "2025-11-15T11:49:15.551685"
+    "rate": {
+      "rate": 95951,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "CoinGecko"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
   },
-  "last_refresh": "2025-11-15T11:49:15.551688",
-  "source": "MockParser",
+  "last_refresh": "2025-11-15T18:59:40.339973Z",
+  "source": {
+    "rate": "MockParser",
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
   "USD_BTC": {
-    "rate": 1.685283146949444e-05,
-    "updated_at": "2025-11-15T11:46:57.298663"
+    "rate": {
+      "rate": {
+        "rate": {
+          "rate": 1.685283146949444e-05,
+          "updated_at": "2025-11-15T11:46:57.298663"
+        },
+        "updated_at": "2025-11-15T18:44:15.177394Z",
+        "source": "ParserService"
+      },
+      "updated_at": "2025-11-15T18:50:06.301823Z",
+      "source": "ParserService"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
+  "EUR_USD": {
+    "rate": {
+      "rate": 0.8606,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "ExchangeRate-API"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
+  "GBP_USD": {
+    "rate": {
+      "rate": 0.7596,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "ExchangeRate-API"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
+  "RUB_USD": {
+    "rate": {
+      "rate": 80.8113,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "ExchangeRate-API"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
+  "ETH_USD": {
+    "rate": {
+      "rate": 3203.48,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "CoinGecko"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
+  },
+  "SOL_USD": {
+    "rate": {
+      "rate": 142.36,
+      "updated_at": "2025-11-15T18:59:40.339752Z",
+      "source": "CoinGecko"
+    },
+    "updated_at": "2025-11-15T18:59:40.339973Z",
+    "source": "ParserService"
   }
 }

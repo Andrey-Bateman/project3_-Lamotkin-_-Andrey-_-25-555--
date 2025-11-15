@@ -4,7 +4,7 @@ from typing import Dict
 from .config import ParserConfig
 from .api_clients import CoinGeckoClient, ExchangeRateApiClient
 from .storage import RatesStorage
-from ..core.exceptions import ApiRequestError 
+from ..core.exceptions import ApiRequestError
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +39,26 @@ class RatesUpdater:
         
         if all_rates:
             timestamp = datetime.utcnow().isoformat() + 'Z'
+            cache = self.storage.load_rates_cache()
             for pair, rate in all_rates.items():
                 from_curr, to_curr = pair.split('_')
+                source = 'ExchangeRate-API' if from_curr in self.config.FIAT_CURRENCIES else 'CoinGecko' 
+                cache[pair] = {'rate': rate, 'updated_at': timestamp, 'source': source}
+            cache['last_refresh'] = timestamp
+            self.storage.save_rates_cache(cache, 'ParserService') 
+            for pair, rate in all_rates.items():
+                from_curr, to_curr = pair.split('_')
+                source = 'ExchangeRate-API' if from_curr in self.config.FIAT_CURRENCIES else 'CoinGecko'
                 entry = {
                     'id': f"{pair}_{timestamp}",
                     'from_currency': from_curr,
                     'to_currency': to_curr,
                     'rate': rate,
                     'timestamp': timestamp,
-                    'source': 'ExchangeRate-API' if from_curr in self.config.FIAT_CURRENCIES else 'CoinGecko',
-                    'meta': {'request_ms': 0, 'status_code': 200} 
+                    'source': source,
+                    'meta': {'request_ms': 0, 'status_code': 200}
                 }
                 self.storage.save_history_entry(entry)
-            self.storage.save_rates_cache(all_rates, 'ParserService')
             logger.info(f"Saved {len(all_rates)} rates to cache/history")
         else:
             logger.warning("No rates fetched — nothing saved")

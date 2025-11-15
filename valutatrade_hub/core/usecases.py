@@ -1,5 +1,5 @@
 import hashlib
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from .models import User, Portfolio, Wallet
 from .utils import load_json, save_json, generate_salt, get_exchange_rate
@@ -19,13 +19,13 @@ def create_user(username: str, password: str) -> Optional[User]:
     user_id = max([u['user_id'] for u in users], default=0) + 1
     salt = generate_salt()
     hashed_password = hashlib.sha256((password + salt).encode()).hexdigest()
-    reg_date = datetime.now()
+    reg_date = datetime.now(timezone.utc)  
     user_data = {
         'user_id': user_id,
         'username': username,
         'hashed_password': hashed_password,
         'salt': salt,
-        'registration_date': reg_date.isoformat()
+        'registration_date': reg_date.isoformat(timespec='milliseconds') 
     }
     users.append(user_data)
     db.save_collection('users.json', users)
@@ -39,7 +39,7 @@ def get_user_by_username(username: str) -> Optional[User]:
         if u_data['username'] == username:
             reg_date = u_data['registration_date']
             if isinstance(reg_date, str):
-                reg_date = datetime.fromisoformat(reg_date)
+                reg_date = datetime.fromisoformat(reg_date)  
             return User(
                 u_data['user_id'],
                 u_data['username'],
@@ -48,6 +48,7 @@ def get_user_by_username(username: str) -> Optional[User]:
                 reg_date
             )
     return None
+
 
 def verify_user_login(username: str, password: str) -> Optional[User]:
     user = get_user_by_username(username)
@@ -62,7 +63,7 @@ def get_user_by_id(user_id: int) -> Optional[User]:
         if u_data['user_id'] == user_id:
             reg_date = u_data['registration_date']
             if isinstance(reg_date, str):
-                reg_date = datetime.fromisoformat(reg_date)
+                reg_date = datetime.fromisoformat(reg_date) 
             return User(
                 u_data['user_id'],
                 u_data['username'],
@@ -71,6 +72,7 @@ def get_user_by_id(user_id: int) -> Optional[User]:
                 reg_date
             )
     return None
+
 
 def create_portfolio(user_id: int) -> None:
     db = DatabaseManager()
@@ -111,7 +113,7 @@ def save_portfolio(portfolio: Portfolio) -> None:
 def buy(user_id: int, currency_code: str, amount: float) -> None:
     if amount <= 0:
         raise ValueError("'amount' должен быть положительным числом")
-    get_currency(currency_code)  
+    get_currency(currency_code) 
     db = DatabaseManager()
     portfolio = get_portfolio(user_id) or Portfolio(user_id)
     wallet = portfolio.get_wallet(currency_code)
@@ -124,7 +126,7 @@ def buy(user_id: int, currency_code: str, amount: float) -> None:
     if usd_rate is None and currency_code != 'USD':
         raise ApiRequestError('No rate data')
     cost = amount * usd_rate if usd_rate else amount
-    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'  
+    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'
     save_portfolio(portfolio)
     print(f"Покупка выполнена: {amount:.4f} {currency_code} по курсу {rate_str} USD/{currency_code}")
     print(f"Изменения в портфеле:\n- {currency_code}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
@@ -135,7 +137,7 @@ def buy(user_id: int, currency_code: str, amount: float) -> None:
 def sell(user_id: int, currency_code: str, amount: float) -> None:
     if amount <= 0:
         raise ValueError("'amount' должен быть положительным числом")
-    get_currency(currency_code)  
+    get_currency(currency_code) 
     db = DatabaseManager()
     portfolio = get_portfolio(user_id)
     if not portfolio:
@@ -151,7 +153,7 @@ def sell(user_id: int, currency_code: str, amount: float) -> None:
     if usd_rate is None and currency_code != 'USD':
         raise ApiRequestError('No rate data')
     revenue = amount * usd_rate if usd_rate else amount
-    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A' 
+    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'
     usd_wallet = portfolio.get_wallet('USD')
     if not usd_wallet:
         portfolio.add_currency('USD')
@@ -168,7 +170,16 @@ def get_rate(from_code: str, to_code: str) -> float:
     get_currency(to_code)
     settings = SettingsLoader()
     ttl = settings.get('rates_ttl_seconds', 300)
+    data = load_json('rates.json')
+    key = f"{from_code}_{to_code}"
+    if key in data:
+        updated_at = data[key].get('updated_at')
+        if updated_at:
+            update_time = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            if now - update_time > timedelta(seconds=ttl):
+                raise ApiRequestError('Кеш устарел, требуется обновление API')
     rate = get_exchange_rate(from_code, to_code)
     if rate is None:
-        raise ApiRequestError('No data available')
+        raise ApiRequestError('Данные курса недоступны')
     return rate

@@ -46,15 +46,15 @@ class ExchangeRateApiClient(BaseApiClient):
             response = requests.get(endpoint, timeout=self.timeout)
             response.raise_for_status()
             data = response.json()
-            print(f"Debug ExchangeRate response: {data}") 
+            print(f"Debug ExchangeRate response: {data}")  
             if data.get('result') != 'success':
                 raise ApiRequestError(f"ExchangeRate-API error: {data.get('error-type', 'Unknown')}")
-            if 'rates' not in data: 
-                raise ApiRequestError(f"Invalid response structure: missing 'rates' key. Response: {data}")
+            if 'conversion_rates' not in data:  
+                raise ApiRequestError(f"Invalid response structure: missing 'conversion_rates' key. Response: {data}")
             rates = {}
             for code in self.config.FIAT_CURRENCIES:
-                if code in data['rates']:
-                    rates[f"{code}_{base_currency}"] = data['rates'][code]
+                if code in data['conversion_rates']: 
+                    rates[f"{code}_{base_currency}"] = data['conversion_rates'][code] 
             return rates
         except requests.exceptions.RequestException as e:
             raise ApiRequestError(f"ExchangeRate-API error: {str(e)}")

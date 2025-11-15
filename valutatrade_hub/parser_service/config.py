@@ -13,7 +13,7 @@ class ParserConfig:
     BASE_CURRENCY: str = "USD"
     FIAT_CURRENCIES: Tuple[str, ...] = ("EUR", "GBP", "RUB")
     CRYPTO_CURRENCIES: Tuple[str, ...] = ("BTC", "ETH", "SOL")
-    CRYPTO_ID_MAP: Dict[str, str] = field(default_factory=lambda: {
+    CRYPTO_ID_MAP: Dict[str, str] = field(default_factory=lambda: { 
         "BTC": "bitcoin",
         "ETH": "ethereum",
         "SOL": "solana",
@@ -24,8 +24,11 @@ class ParserConfig:
 
     REQUEST_TIMEOUT: int = 10
 
+    
+    rates_ttl_seconds: int = field(default=300)  
+
     def validate(self) -> None:
         if not self.EXCHANGERATE_API_KEY:
-            raise ValueError("EXCHANGERATE_API_KEY не установлен")
+            raise ValueError("EXCHANGERATE_API_KEY не установлен. Зарегистрируйся и добавь в .env")
         if not self.COINGECKO_API_KEY:
-            print("CoinGecko ключ не установлен")
+            print("CoinGecko ключ не установлен — используем публичный доступ (лимит 50/min)")

@@ -1,6 +1,6 @@
 import json  
 import os    
-from datetime import datetime, timedelta  
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, Union, List
 DATA_DIR = 'data'
 
@@ -40,25 +40,25 @@ def save_json(filename: str, data: Union[List[Dict[str, Any]], Dict[str, Any]]) 
 
 def get_exchange_rate(from_currency: str, to_currency: str) -> Optional[float]:
     key = f"{from_currency.upper()}_{to_currency.upper()}"
-    data = load_json('rates.json')  
+    data = load_json('rates.json')
     if key in data:
         updated_at = data[key].get('updated_at')
         if updated_at:
-            update_time = datetime.fromisoformat(updated_at)
-            if datetime.now() - update_time < timedelta(minutes=5):
+            reg_date_str = updated_at
+            update_time = datetime.fromisoformat(reg_date_str) 
+            now = datetime.now(timezone.utc) 
+            if now - update_time < timedelta(minutes=5):
                 return data[key]['rate']
     
     rate = EXCHANGE_RATES.get(key)
     if rate is not None:
-        if key not in data:
-            data[key] = {}
-        data[key]['rate'] = rate
-        data[key]['updated_at'] = datetime.now().isoformat()
-        data['last_refresh'] = datetime.now().isoformat()
-        data['source'] = 'MockParser'  
+        timestamp = datetime.now(timezone.utc).isoformat(timespec='milliseconds') 
+        data[key] = {'rate': rate, 'updated_at': timestamp}
+        data['last_refresh'] = timestamp
+        data['source'] = 'MockParser'
         save_json('rates.json', data)
         return rate
-    return None  
+    return None
 
 def generate_salt() -> str:
     import hashlib  
