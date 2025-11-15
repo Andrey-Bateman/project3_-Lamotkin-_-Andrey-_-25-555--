@@ -4,7 +4,7 @@ from typing import Optional
 from prettytable import PrettyTable
 from valutatrade_hub.core.usecases import (create_user, verify_user_login, get_portfolio, save_portfolio, get_user_by_id, buy, sell, get_rate)
 from valutatrade_hub.core.models import Portfolio, User
-from valutatrade_hub.core.utils import load_json, get_exchange_rate, load_session, save_session, clear_session 
+from valutatrade_hub.core.utils import load_json, get_exchange_rate, load_session, save_session, clear_session
 from valutatrade_hub.core.exceptions import InsufficientFundsError, CurrencyNotFoundError, ApiRequestError
 
 current_user: Optional[User] = None
@@ -61,6 +61,52 @@ def logout(args):
     clear_session()
     print("Вы вышли из системы")
 
+def update_rates(args):
+    from valutatrade_hub.parser_service.config import ParserConfig
+    from valutatrade_hub.parser_service.updater import RatesUpdater
+    config = ParserConfig()
+    updater = RatesUpdater(config)
+    if args.source == 'coingecko':
+        crypto_rates = updater.coingecko.fetch_rates(config.BASE_CURRENCY)
+        updater.storage.save_rates_cache(crypto_rates, 'CoinGecko')
+        print(f"Updated CoinGecko: {len(crypto_rates)} rates")
+    elif args.source == 'exchangerate':
+        fiat_rates = updater.exrate.fetch_rates(config.BASE_CURRENCY)
+        updater.storage.save_rates_cache(fiat_rates, 'ExchangeRate-API')
+        print(f"Updated ExchangeRate-API: {len(fiat_rates)} rates")
+    else:
+        result = updater.run_update()
+        print(f"Update successful. Total rates updated: {result['updated']}. Errors: {result['errors']}")
+        if result['errors']:
+            print("Check logs for details.")
+
+def show_rates(args):
+    data = load_json('rates.json')
+    if not data or 'pairs' not in data:
+        print("Локальный кеш курсов пуст. Выполните 'update-rates'.")
+        return
+    pairs = data['pairs']
+    base = (args.base or 'USD').upper()
+    if args.currency:
+        key = f"{args.currency.upper()}_{base}"
+        if key in pairs:
+            pair = pairs[key]
+            print(f"Курс {args.currency.upper()}→{base}: {pair['rate']} (обновлено: {pair['updated_at']}, {pair['source']})")
+        else:
+            print(f"Курс для '{args.currency}' не найден в кеше.")
+        return
+    if args.top:
+        crypto_pairs = {k: v for k, v in pairs.items() if k.endswith('_USD') and k.startswith(('BTC', 'ETH', 'SOL'))}
+        sorted_crypto = sorted(crypto_pairs.items(), key=lambda x: x[1]['rate'], reverse=True)[:args.top]
+        print(f"Top {args.top} крипто (база USD):")
+        for pair_key, pair in sorted_crypto:
+            print(f"- {pair_key}: {pair['rate']} ({pair['source']})")
+    else:
+        print(f"Все курсы (база {base}):")
+        for pair_key, pair in pairs.items():
+            if pair_key.endswith(f"_{base}"):
+                print(f"- {pair_key}: {pair['rate']} ({pair['source']}, {pair['updated_at']})")
+
 def main():
     global current_user
     session_id = load_session()
@@ -72,24 +118,39 @@ def main():
             clear_session()
     parser = argparse.ArgumentParser(description='ValutaTrade Hub CLI')
     subparsers = parser.add_subparsers(dest='command', help='Доступные команды')
+
     reg = subparsers.add_parser('register', help='Регистрация нового пользователя')
     reg.add_argument('--username', required=True, help='Имя пользователя (уникальное)')
     reg.add_argument('--password', required=True, help='Пароль (минимум 4 символа)')
+
     log = subparsers.add_parser('login', help='Вход в систему')
     log.add_argument('--username', required=True)
     log.add_argument('--password', required=True)
+
     pf = subparsers.add_parser('show-portfolio', help='Показать портфель')
     pf.add_argument('--base', default='USD', help='Базовая валюта для конвертации (по умолчанию USD)')
+
     buy_p = subparsers.add_parser('buy', help='Купить валюту')
     buy_p.add_argument('--currency', required=True, help='Код валюты (e.g., BTC, EUR)')
     buy_p.add_argument('--amount', type=float, required=True, help='Количество для покупки')
+
     sell_p = subparsers.add_parser('sell', help='Продать валюту')
     sell_p.add_argument('--currency', required=True, help='Код валюты')
     sell_p.add_argument('--amount', type=float, required=True, help='Количество для продажи')
+
     rate_p = subparsers.add_parser('get-rate', help='Получить курс валют')
     rate_p.add_argument('--from', dest='from_', required=True, help='Исходная валюта (e.g., USD)')
     rate_p.add_argument('--to', required=True, help='Целевая валюта (e.g., BTC)')
+
     logout_p = subparsers.add_parser('logout', help='Выход из системы')
+
+    update_p = subparsers.add_parser('update-rates', help='Обновить курсы')
+    update_p.add_argument('--source', choices=['coingecko', 'exchangerate', 'all'], default='all', help='Источник (default: all)')
+
+    show_rates_p = subparsers.add_parser('show-rates', help='Показать курсы')
+    show_rates_p.add_argument('--currency', help='Курс для валюты')
+    show_rates_p.add_argument('--top', type=int, help='Top N крипты')
+    show_rates_p.add_argument('--base', default='USD', help='База')
 
     args = parser.parse_args()
     if not args.command:
@@ -118,6 +179,10 @@ def main():
                 print(f"Обратный курс {args.to.upper()}→{args.from_.upper()}: {rev_rate:.2f}")
         elif args.command == 'logout':
             logout(args)
+        elif args.command == 'update-rates':
+            update_rates(args) 
+        elif args.command == 'show-rates':
+            show_rates(args) 
     except InsufficientFundsError as e:
         print(str(e))
     except CurrencyNotFoundError as e:
