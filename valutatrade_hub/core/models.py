@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Optional  
 from typing import Dict
 from .utils import get_exchange_rate
-
+from .currencies import get_currency
 class User:
     def __init__(self, user_id: int, username: str, hashed_password: str, salt: str, registration_date: datetime):
         self._user_id = user_id
@@ -59,8 +59,7 @@ class Wallet:
         if not currency_code or not isinstance(currency_code, str):
             raise ValueError("Код валюты не может быть пустым")
         self.currency_code = currency_code.upper()  
-        self._balance = float(balance)  
-
+        self._balance = float(balance)
     @property
     def balance(self) -> float:
         return self._balance
@@ -84,8 +83,7 @@ class Wallet:
         self._balance -= float(amount)
 
     def get_balance_info(self) -> str:
-        return f"{self.currency_code}: {self._balance:.4f}"  
-
+        return f"{self.currency.get_display_info()}: {self._balance:.4f}"
 class Portfolio:
     def __init__(self, user_id: int, wallets: Dict[str, Wallet] = None):
         self._user_id = user_id

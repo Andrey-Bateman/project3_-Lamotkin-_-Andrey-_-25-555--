@@ -7,6 +7,7 @@ from .exceptions import CurrencyNotFoundError, InsufficientFundsError, ApiReques
 from .currencies import get_currency
 from ..infra.database import DatabaseManager
 from ..decorators import log_action
+from ..infra.settings import SettingsLoader
 
 def create_user(username: str, password: str) -> Optional[User]:
     db = DatabaseManager()
@@ -123,8 +124,9 @@ def buy(user_id: int, currency_code: str, amount: float) -> None:
     if usd_rate is None and currency_code != 'USD':
         raise ApiRequestError('No rate data')
     cost = amount * usd_rate if usd_rate else amount
+    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'  
     save_portfolio(portfolio)
-    print(f"Покупка выполнена: {amount:.4f} {currency_code} по курсу {usd_rate:.2f if usd_rate else 'N/A'} USD/{currency_code}")
+    print(f"Покупка выполнена: {amount:.4f} {currency_code} по курсу {rate_str} USD/{currency_code}")
     print(f"Изменения в портфеле:\n- {currency_code}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
     print(f"Оценочная стоимость покупки: {cost:.2f} USD")
     return f"Cost: {cost:.2f} USD"
@@ -149,30 +151,23 @@ def sell(user_id: int, currency_code: str, amount: float) -> None:
     if usd_rate is None and currency_code != 'USD':
         raise ApiRequestError('No rate data')
     revenue = amount * usd_rate if usd_rate else amount
+    rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A' 
     usd_wallet = portfolio.get_wallet('USD')
     if not usd_wallet:
         portfolio.add_currency('USD')
         usd_wallet = portfolio.get_wallet('USD')
     usd_wallet.deposit(revenue)
     save_portfolio(portfolio)
-    print(f"Продажа выполнена: {amount:.4f} {currency_code} по курсу {usd_rate:.2f if usd_rate else 'N/A'} USD/{currency_code}")
+    print(f"Продажа выполнена: {amount:.4f} {currency_code} по курсу {rate_str} USD/{currency_code}")
     print(f"Изменения в портфеле:\n- {currency_code}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
     print(f"Оценочная выручка: {revenue:.2f} USD")
     return f"Revenue: {revenue:.2f} USD"
 
 def get_rate(from_code: str, to_code: str) -> float:
-    get_currency(from_code)  
-    get_currency(to_code)  
+    get_currency(from_code)
+    get_currency(to_code)
     settings = SettingsLoader()
     ttl = settings.get('rates_ttl_seconds', 300)
-    data = load_json('rates.json')
-    key = f"{from_code}_{to_code}"
-    if key in data:
-        updated_at = data[key].get('updated_at')
-        if updated_at:
-            update_time = datetime.fromisoformat(updated_at)
-            if datetime.now() - update_time > timedelta(seconds=ttl):
-                raise ApiRequestError('Cache expired, API call needed')
     rate = get_exchange_rate(from_code, to_code)
     if rate is None:
         raise ApiRequestError('No data available')

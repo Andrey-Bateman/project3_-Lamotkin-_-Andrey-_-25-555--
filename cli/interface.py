@@ -2,9 +2,10 @@ import argparse
 import sys
 from typing import Optional
 from prettytable import PrettyTable
-from valutatrade_hub.core.usecases import (create_user, verify_user_login, get_portfolio, save_portfolio, get_user_by_id)
+from valutatrade_hub.core.usecases import (create_user, verify_user_login, get_portfolio, save_portfolio, get_user_by_id, buy, sell, get_rate)
 from valutatrade_hub.core.models import Portfolio, User
-from valutatrade_hub.core.utils import load_json, get_exchange_rate, load_session, save_session, clear_session
+from valutatrade_hub.core.utils import load_json, get_exchange_rate, load_session, save_session, clear_session 
+from valutatrade_hub.core.exceptions import InsufficientFundsError, CurrencyNotFoundError, ApiRequestError
 
 current_user: Optional[User] = None
 
@@ -21,7 +22,7 @@ def login(args):
         user = verify_user_login(args.username, args.password)
         if user:
             current_user = user
-            save_session(user.user_id)  
+            save_session(user.user_id)
             print(f"Вы вошли как '{user.username}'")
         else:
             print("Неверный пароль")
@@ -54,88 +55,6 @@ def show_portfolio(args):
     except ValueError as e:
         print(str(e) or f"Неизвестная базовая валюта '{args.base}'")
 
-def buy(args):
-    global current_user
-    if not current_user:
-        print("Сначала выполните login")
-        return
-    try:
-        currency = args.currency.upper()
-        amount = float(args.amount)
-        if amount <= 0:
-            raise ValueError("'amount' должен быть положительным числом")
-        portfolio = get_portfolio(current_user.user_id) or Portfolio(current_user.user_id)
-        wallet = portfolio.get_wallet(currency)
-        if not wallet:
-            portfolio.add_currency(currency)
-            wallet = portfolio.get_wallet(currency)
-        old_balance = wallet.balance
-        wallet.deposit(amount)
-        usd_rate = get_exchange_rate(currency, 'USD')
-        if usd_rate is None and currency != 'USD':
-            raise ValueError(f"Не удалось получить курс для {currency}→USD")
-        cost = amount * usd_rate if usd_rate is not None else amount
-        rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'
-        save_portfolio(portfolio)
-        print(f"Покупка выполнена: {amount:.4f} {currency} по курсу {rate_str} USD/{currency}")
-        print(f"Изменения в портфеле:\n- {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
-        print(f"Оценочная стоимость покупки: {cost:.2f} USD")
-    except ValueError as e:
-        print(str(e))
-
-def sell(args):
-    global current_user
-    if not current_user:
-        print("Сначала выполните login")
-        return
-    try:
-        currency = args.currency.upper()
-        amount = float(args.amount)
-        if amount <= 0:
-            raise ValueError("'amount' должен быть положительным числом")
-        portfolio = get_portfolio(current_user.user_id)
-        if not portfolio:
-            raise ValueError("У вас нет портфеля.")
-        wallet = portfolio.get_wallet(currency)
-        if not wallet:
-            raise ValueError(f"У вас нет кошелька '{currency}'. Добавьте валюту: она создаётся автоматически при первой покупке.")
-        old_balance = wallet.balance
-        wallet.withdraw(amount)
-        usd_rate = get_exchange_rate(currency, 'USD')
-        if usd_rate is None and currency != 'USD':
-            raise ValueError(f"Не удалось получить курс для {currency}→USD")
-        revenue = amount * usd_rate if usd_rate is not None else amount
-        rate_str = f"{usd_rate:.2f}" if usd_rate is not None else 'N/A'
-     
-        usd_wallet = portfolio.get_wallet('USD')
-        if not usd_wallet:
-            portfolio.add_currency('USD')
-            usd_wallet = portfolio.get_wallet('USD')
-        usd_wallet.deposit(revenue)
-        save_portfolio(portfolio)
-        print(f"Продажа выполнена: {amount:.4f} {currency} по курсу {rate_str} USD/{currency}")
-        print(f"Изменения в портфеле:\n- {currency}: было {old_balance:.4f} → стало {wallet.balance:.4f}")
-        print(f"Оценочная выручка: {revenue:.2f} USD")
-    except ValueError as e:
-        print(str(e))
-
-def get_rate(args):
-    try:
-        from_curr = args.from_.upper()  #
-        to_curr = args.to.upper()
-        rate = get_exchange_rate(from_curr, to_curr)
-        if rate is None:
-            raise ValueError(f"Курс {from_curr}→{to_curr} недоступен. Повторите попытку позже.")
-        data = load_json('rates.json')
-        key = f"{from_curr}_{to_curr}"
-        updated = data.get(key, {}).get('updated_at', 'unknown')
-        print(f"Курс {from_curr}→{to_curr}: {rate:.8f} (обновлено: {updated})")
-        rev_rate = get_exchange_rate(to_curr, from_curr)
-        if rev_rate:
-            print(f"Обратный курс {to_curr}→{from_curr}: {rev_rate:.2f}")
-    except ValueError as e:
-        print(str(e))
-
 def logout(args):
     global current_user
     current_user = None
@@ -151,7 +70,6 @@ def main():
             current_user = user
         else:
             clear_session()
-
     parser = argparse.ArgumentParser(description='ValutaTrade Hub CLI')
     subparsers = parser.add_subparsers(dest='command', help='Доступные команды')
     reg = subparsers.add_parser('register', help='Регистрация нового пользователя')
@@ -172,10 +90,12 @@ def main():
     rate_p.add_argument('--from', dest='from_', required=True, help='Исходная валюта (e.g., USD)')
     rate_p.add_argument('--to', required=True, help='Целевая валюта (e.g., BTC)')
     logout_p = subparsers.add_parser('logout', help='Выход из системы')
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(1)
+
     try:
         if args.command == 'register':
             register(args)
@@ -184,11 +104,18 @@ def main():
         elif args.command == 'show-portfolio':
             show_portfolio(args)
         elif args.command == 'buy':
-            buy(args)
+            buy(current_user.user_id, args.currency.upper(), float(args.amount))
         elif args.command == 'sell':
-            sell(args)
+            sell(current_user.user_id, args.currency.upper(), float(args.amount))
         elif args.command == 'get-rate':
-            get_rate(args)
+            rate = get_rate(args.from_.upper(), args.to.upper())
+            data = load_json('rates.json')
+            key = f"{args.from_.upper()}_{args.to.upper()}"
+            updated = data.get(key, {}).get('updated_at', 'unknown')
+            print(f"Курс {args.from_.upper()}→{args.to.upper()}: {rate:.8f} (обновлено: {updated})")
+            rev_rate = get_exchange_rate(args.to.upper(), args.from_.upper())
+            if rev_rate:
+                print(f"Обратный курс {args.to.upper()}→{args.from_.upper()}: {rev_rate:.2f}")
         elif args.command == 'logout':
             logout(args)
     except InsufficientFundsError as e:
